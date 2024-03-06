@@ -1,0 +1,12 @@
+pandas==1.5.3
+streamlit
+altair
+watchdog
+jax
+jaxlib
+numpy
+scipy
+matplotlib
+pystarboard @ git+https://github.com/protocol/pystarboard.git
+scenario-generator @ git+https://github.com/protocol/scenario-generator.git
+mechafil-jax @ git+https://github.com/protocol/mechafil-jax.git
