@@ -95,21 +95,24 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     hypothetical_minting_df['RBP=Baseline'] = cum_network_reward/1e6
     hypothetical_minting_df['date'] = pd.to_datetime(baseline_dates)
     minting_dff = minting_dff.merge(hypothetical_minting_df, on='date', how='left')
+    current_date_vline = alt.Chart(
+        pd.DataFrame({'date': [current_date]})).mark_rule(strokeDash=[3,5], color='black').encode(x='date:T')
 
     power_df = pd.melt(power_dff, id_vars=["date"], 
                         value_vars=["Baseline", "RBP"],
                         var_name='Power', 
-                        value_name='EIB')
-    power_df['EIB'] = power_df['EIB']
+                        value_name='EiB')
+    power_df['EiB'] = power_df['EiB']
     power = (
         alt.Chart(power_df)
         .mark_line()
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
-                y=alt.Y("EIB").scale(type='log'), 
-                color=alt.Color('Power', legend=alt.Legend(title=None)))
+                y=alt.Y("EiB").scale(type='log'), 
+                color=alt.Color('Power', legend=alt.Legend(title=None, orient='top')))
         .properties(title="Network Power", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
     )
+    power += current_date_vline
     # st.altair_chart(power.interactive(), use_container_width=True) 
 
     minting_df = pd.melt(minting_dff, id_vars=["date"],
@@ -120,14 +123,21 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .mark_line()
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("Mined FIL", title='M-FIL'), 
-                color=alt.Color('Scenario', legend=alt.Legend(title=None)))
+                color=alt.Color('Scenario', legend=alt.Legend(title=None, orient='top')))
         .properties(title="Mined FIL", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
     )
+    
+    minting += current_date_vline
     # st.altair_chart(minting.interactive(), use_container_width=True)
     autosize = alt.AutoSizeParams(contains="content", resize=True, type='fit-x')
-    final_chart = alt.vconcat(power, minting, autosize=autosize).resolve_scale(x='shared')
+    final_chart = alt.vconcat(minting, power, autosize=autosize).resolve_scale(x='shared', color='independent')
     st.altair_chart(final_chart, use_container_width=True)
+    # col1, col2 = st.columns(2)
+    # with col1:
+    #     st.altair_chart(minting.interactive(), use_container_width=True)
+    # with col2:
+    #     st.altair_chart(power.interactive(), use_container_width=True)
 
 
 def run_sim(rbp, rr, fpr, lock_target, start_date, current_date, forecast_length_days, sector_duration_days, offline_data):
@@ -151,7 +161,6 @@ def forecast_economy(start_date=None, current_date=None, end_date=None, forecast
     
     rb_onboard_power_pib_day =  st.session_state['rbp_slider']
     renewal_rate_pct = st.session_state['rr_slider']
-    # fil_plus_rate_pct = st.session_state['fpr_slider']
     fil_plus_rate_pct = fpr_pct
 
     lock_target = 0.3
@@ -195,10 +204,13 @@ def main():
         layout="wide",
     )
     current_date = date.today() - timedelta(days=3)
-    mo_start = max(current_date.month - 1 % 12, 1)
-    start_date = date(current_date.year, mo_start, 1)
-    forecast_length_days=365*10
-    end_date = current_date + timedelta(days=forecast_length_days)
+    # mo_start = max(current_date.month - 1 % 12, 1)
+    # start_date = date(current_date.year, mo_start, 1)
+    start_date = date(2021, 3, 15)
+    # forecast_length_days=365*16
+    # end_date = current_date + timedelta(days=forecast_length_days)
+    end_date = date(2040, 1, 1)
+    forecast_length_days = (end_date - current_date).days
     forecast_kwargs = {
         'start_date': start_date,
         'current_date': current_date,
@@ -216,7 +228,7 @@ def main():
 
         st.slider("Raw Byte Onboarding (PiB/day)", min_value=3., max_value=100., value=smoothed_last_historical_rbp, step=.1, format='%0.02f', key="rbp_slider",
                 on_change=forecast_economy, kwargs=forecast_kwargs, disabled=False, label_visibility="visible")
-        st.slider("Renewal Rate (Percentage)", min_value=10, max_value=99, value=smoothed_last_historical_renewal_pct, step=1, format='%d', key="rr_slider",
+        st.slider("SP Renewal Rate (%)", min_value=10, max_value=99, value=smoothed_last_historical_renewal_pct, step=1, format='%d', key="rr_slider",
                 on_change=forecast_economy, kwargs=forecast_kwargs, disabled=False, label_visibility="visible")
         # st.slider("FIL+ Rate (Percentage)", min_value=10, max_value=99, value=smoothed_last_historical_fil_plus_pct, step=1, format='%d', key="fpr_slider",
         #         on_change=forecast_economy, kwargs=forecast_kwargs, disabled=False, label_visibility="visible")
