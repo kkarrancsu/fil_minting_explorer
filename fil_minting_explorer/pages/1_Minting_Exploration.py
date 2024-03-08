@@ -108,7 +108,9 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .mark_line()
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("EiB").scale(type='log'), 
-                color=alt.Color('Power', legend=alt.Legend(title=None, orient='top')))
+                color=alt.Color('Power', 
+                                sort=['Baseline', 'RBP'],
+                                legend=alt.Legend(title=None, orient='top')))
         .properties(title="Network Power", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
     )
@@ -123,7 +125,9 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .mark_line()
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("Mined FIL", title='M-FIL'), 
-                color=alt.Color('Scenario', legend=alt.Legend(title=None, orient='top')))
+                color=alt.Color('Scenario', 
+                                sort=['RBP=Baseline', 'Configured (Total Minting)', 'Simple Minting'],
+                                legend=alt.Legend(title=None, orient='top')))
         .properties(title="Mined FIL", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
     )
