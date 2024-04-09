@@ -10,3 +10,4 @@ matplotlib
 pystarboard @ git+https://github.com/protocol/pystarboard.git
 scenario-generator @ git+https://github.com/protocol/scenario-generator.git
 mechafil-jax @ git+https://github.com/protocol/mechafil-jax.git
+pillow

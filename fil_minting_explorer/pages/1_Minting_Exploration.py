@@ -24,6 +24,7 @@ import mechafil_jax.minting as minting
 import mechafil_jax.date_utils as du
 
 import scenario_generator.utils as u
+from PIL import Image
 
 def local_css(file_name):
     with open(file_name) as f:
@@ -44,6 +45,15 @@ def get_offline_data(start_date, current_date, end_date):
     smoothed_last_historical_fpr = float(np.median(hist_fpr[-30:]))
 
     return offline_data, smoothed_last_historical_rbp, smoothed_last_historical_rr, smoothed_last_historical_fpr
+
+@st.cache_data
+def get_max_historical_data(current_date):
+    start_date = date(2021, 3, 15)
+    _, max_historical_rbp = u.get_historical_daily_onboarded_power(start_date, current_date)
+    max_historical_rbp = float(np.nanmax(max_historical_rbp))
+    _, max_historical_rr = u.get_historical_renewal_rate(start_date, current_date)
+    max_historical_rr = float(np.nanmax(max_historical_rr))
+    return max_historical_rbp, max_historical_rr
 
 @st.cache_data
 def rbp_match_minting(start_date, end_date):
@@ -78,6 +88,9 @@ def rbp_match_minting(start_date, end_date):
 def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # convert results dictionary into a dataframe so that we can use altair to make nice plots
     status_quo_results = scenario_results['status-quo']
+    max_hist_results = scenario_results['max-hist']
+    # print(status_quo_results.keys())
+    # print(status_quo_results['circ_supply'].shape)
 
     power_dff = pd.DataFrame()
     power_dff['RBP'] = status_quo_results['rb_total_power_eib']
@@ -87,10 +100,42 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
 
     minting_dff = pd.DataFrame()
     minting_dff['Configured (Total Minting)'] = status_quo_results['cum_network_reward']/1e6
+    minting_dff['Max Historical (Total Minting)'] = max_hist_results['cum_network_reward']/1e6
     minting_dff['Simple Minting'] = status_quo_results['cum_simple_reward']/1e6
     minting_dff['date'] = pd.to_datetime(du.get_t(start_date, end_date=end_date))
     # get hypothetical minting if RBP matched baseline
     cum_network_reward, baseline_dates = rbp_match_minting(start_date, end_date)
+
+    ## circ-supply DF
+    dates_of_interest = [
+        date(2027, 12, 31),
+        date(2030, 12, 31),
+        date(2033, 12, 31),
+        date(2036, 12, 31),
+        date(2039, 12, 31)
+    ]
+    date2ts = {}
+    for d in dates_of_interest:
+        ix = (d - start_date).days
+        ts_configured = status_quo_results['cum_network_reward'][ix]/1e6 + status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
+        ts_simple = status_quo_results['cum_simple_reward'][ix]/1e6 + status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
+        ts_baseline = max_hist_results['cum_network_reward'][ix]/1e6 + max_hist_results['network_gas_burn'][ix]/1e6  + max_hist_results['total_vest'][ix]/1e6
+        date2ts[d] = {
+            'Simple': ts_simple,
+            'Configured': ts_configured,
+            'Max-Historical': ts_baseline
+        }
+    ts_df = pd.DataFrame(date2ts).T
+    ts_df['date'] = pd.to_datetime(ts_df.index)
+    ts_df = ts_df.reset_index(drop=True)
+    ts_dff = ts_df.copy()
+    ts_dff.set_index('date', inplace=True)
+    # print(ts_dff[['Simple', 'Configured', 'Baseline']])
+    # ts_df = pd.melt(ts_df, id_vars=["date"],
+    #                         value_vars=["Configured", "Simple", "Baseline"],
+    #                         var_name='Scenario', value_name='Total Supply (M-FIL)')
+    # print(ts_df)
+
     hypothetical_minting_df = pd.DataFrame()
     hypothetical_minting_df['RBP=Baseline'] = cum_network_reward/1e6
     hypothetical_minting_df['date'] = pd.to_datetime(baseline_dates)
@@ -118,7 +163,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # st.altair_chart(power.interactive(), use_container_width=True) 
 
     minting_df = pd.melt(minting_dff, id_vars=["date"],
-                            value_vars=["Configured (Total Minting)", "RBP=Baseline", "Simple Minting"],
+                            value_vars=["Configured (Total Minting)", "Max Historical (Total Minting)", "RBP=Baseline", "Simple Minting"],
                             var_name='Scenario', value_name='Mined FIL')
     minting = (
         alt.Chart(minting_df)
@@ -142,6 +187,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     #     st.altair_chart(minting.interactive(), use_container_width=True)
     # with col2:
     #     st.altair_chart(power.interactive(), use_container_width=True)
+    st.write(ts_dff[['Simple', 'Configured', 'Max-Historical']])
 
 
 def run_sim(rbp, rr, fpr, lock_target, start_date, current_date, forecast_length_days, sector_duration_days, offline_data):
@@ -175,14 +221,19 @@ def forecast_economy(start_date=None, current_date=None, end_date=None, forecast
     offline_data, _, _, _ = get_offline_data(start_date, current_date, end_date)
     t3 = time.time()
 
+    max_hist_rbp, max_hist_rr = get_max_historical_data(current_date)
     # run simulation for the configured scenario, and for a pessimsitc and optimistic version of it
-    scenario_scalers = [1.0]
-    scenario_strings = ['status-quo']
+    scenario_strings = ['status-quo', 'max-hist']
     scenario_results = {}
-    for ii, scenario_scaler in enumerate(scenario_scalers):
-        rbp_val = rb_onboard_power_pib_day * scenario_scaler
-        rr_val = max(0.0, min(1.0, renewal_rate_pct / 100. * scenario_scaler))
-        fpr_val = max(0.0, min(1.0, fil_plus_rate_pct / 100. * scenario_scaler))
+    for ii, scenario_str in enumerate(scenario_strings):
+        if scenario_str == 'status-quo':
+            rbp_val = rb_onboard_power_pib_day
+            rr_val = max(0.0, min(1.0, renewal_rate_pct / 100.))
+            fpr_val = max(0.0, min(1.0, fil_plus_rate_pct / 100.))
+        else:
+            rbp_val = max_hist_rbp
+            rr_val = max_hist_rr
+            fpr_val = max(0.0, min(1.0, fil_plus_rate_pct / 100.))
 
         rbp = jnp.ones(forecast_length_days) * rbp_val
         rr = jnp.ones(forecast_length_days) * rr_val
@@ -202,9 +253,10 @@ def forecast_economy(start_date=None, current_date=None, end_date=None, forecast
     # d.debug(f"Total Time: {t4-t1}")
 
 def main():
+    im = Image.open("./fil_minting_explorer/static/fil_logo.png")
     st.set_page_config(
         page_title="Filecoin Economics Explorer",
-        page_icon="🚀",  # TODO: can update this to the FIL logo
+        page_icon=im,
         layout="wide",
     )
     current_date = date.today() - timedelta(days=3)
