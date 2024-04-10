@@ -29,7 +29,11 @@ st.markdown(
      - **Renewal Rate** - This is the percentage of sectors which are expiring that are renewed.
     
     Once these values are configured, click the "Forecast" button. The digital-twin runs in the background, taking into account both historical data pulled directly from the Filecoin blockchain and the mechanistic laws defining the various aspects of Filecoin's circulating supply to forecast 
-    these statistics for the next 10 years. The results are displayed in the form of a graph, which you can download as a PNG file by clicking the "Download" button.
+    these statistics until 2040. The results are displayed in the form of a graph, which you can download as a PNG file by clicking the "Download" button.  Additionally, a table showing
+    the forecasted total supply (TS = Minting + Vesting - Burning) is displayed below the graph.  The three columns represent three relevant scenarios: 
+    - **Simple** - This scenario assumes that only simple minting occurs going forward.
+    - **Configured** - This scenario uses the configured onboarding and renewal rates.
+    - **Max-Historical** - This scenario assumes that the historical maximum renewal and onboarding rates are maintained.
 
     ### Want to learn more?
 
