@@ -93,58 +93,65 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # print(status_quo_results['circ_supply'].shape)
 
     power_dff = pd.DataFrame()
-    power_dff['RBP'] = status_quo_results['rb_total_power_eib']
+    power_dff['Configured'] = status_quo_results['rb_total_power_eib']
+    power_dff['Max-Historical'] = max_hist_results['rb_total_power_eib']
     power_dff['QAP'] = status_quo_results['qa_total_power_eib']
     power_dff['Baseline'] = baseline
     power_dff['date'] = pd.to_datetime(du.get_t(start_date, end_date=end_date))
 
     minting_dff = pd.DataFrame()
-    minting_dff['Configured (Total Minting)'] = status_quo_results['cum_network_reward']/1e6
-    minting_dff['Max Historical (Total Minting)'] = max_hist_results['cum_network_reward']/1e6
-    minting_dff['Simple Minting'] = status_quo_results['cum_simple_reward']/1e6
+    ixx = (current_date - start_date).days
+    simple_before_curdate = status_quo_results['cum_network_reward'][:ixx]/1e6
+    simple_after_curdate = status_quo_results['cum_simple_reward'][ixx:]/1e6  + (simple_before_curdate[-1]-status_quo_results['cum_simple_reward'][ixx]/1e6)
+    simple_minting = np.concatenate([simple_before_curdate, simple_after_curdate])
+    minting_dff['Configured'] = status_quo_results['cum_network_reward']/1e6
+    minting_dff['Max-Historical'] = max_hist_results['cum_network_reward']/1e6
+    minting_dff['Simple'] = simple_minting
     minting_dff['date'] = pd.to_datetime(du.get_t(start_date, end_date=end_date))
     # get hypothetical minting if RBP matched baseline
     cum_network_reward, baseline_dates = rbp_match_minting(start_date, end_date)
-
     ## circ-supply DF
-    dates_of_interest = [
-        date(2027, 12, 31),
-        date(2030, 12, 31),
-        date(2033, 12, 31),
-        date(2036, 12, 31),
-        date(2039, 12, 31)
-    ]
+    dates_of_interest = [current_date]
+    doi = current_date + timedelta(days=365*5)
+    while doi < end_date:
+        dates_of_interest.append(doi)
+        doi += timedelta(days=365*5)
+    final_date = end_date - timedelta(days=1)
+    if final_date not in dates_of_interest:
+        dates_of_interest.append(final_date)
     date2ts = {}
     for d in dates_of_interest:
         ix = (d - start_date).days
-        ts_configured = status_quo_results['cum_network_reward'][ix]/1e6 + status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
-        ts_simple = status_quo_results['cum_simple_reward'][ix]/1e6 + status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
-        ts_baseline = max_hist_results['cum_network_reward'][ix]/1e6 + max_hist_results['network_gas_burn'][ix]/1e6  + max_hist_results['total_vest'][ix]/1e6
+        # ix_cur = (current_date - start_date).days
+        ts_configured_ix = status_quo_results['cum_network_reward'][ix]/1e6 - status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
+        ts_simple_ix = minting_dff['Simple'][ix] - status_quo_results['network_gas_burn'][ix]/1e6  + status_quo_results['total_vest'][ix]/1e6
+        ts_maxhist_ix = max_hist_results['cum_network_reward'][ix]/1e6 - max_hist_results['network_gas_burn'][ix]/1e6  + max_hist_results['total_vest'][ix]/1e6
+
         date2ts[d] = {
-            'Simple': ts_simple,
-            'Configured': ts_configured,
-            'Max-Historical': ts_baseline
+            'Simple': float(ts_simple_ix),
+            'Configured': float(ts_configured_ix),
+            'Max-Historical': float(ts_maxhist_ix)
         }
     ts_df = pd.DataFrame(date2ts).T
     ts_df['date'] = pd.to_datetime(ts_df.index)
     ts_df = ts_df.reset_index(drop=True)
     ts_dff = ts_df.copy()
     ts_dff.set_index('date', inplace=True)
-    # print(ts_dff[['Simple', 'Configured', 'Baseline']])
-    # ts_df = pd.melt(ts_df, id_vars=["date"],
-    #                         value_vars=["Configured", "Simple", "Baseline"],
-    #                         var_name='Scenario', value_name='Total Supply (M-FIL)')
-    # print(ts_df)
 
     hypothetical_minting_df = pd.DataFrame()
-    hypothetical_minting_df['RBP=Baseline'] = cum_network_reward/1e6
+    ixx = (current_date - start_date).days
+    rbp_baseline_before_curdate = status_quo_results['cum_network_reward'][:ixx]/1e6
+    rbp_baseline_after_curdate = cum_network_reward[ixx:]/1e6 + (rbp_baseline_before_curdate[-1]-cum_network_reward[ixx]/1e6)
+    rbp_baseline_minting = np.concatenate([rbp_baseline_before_curdate, rbp_baseline_after_curdate])
+    hypothetical_minting_df['RBP=Baseline'] = rbp_baseline_minting
+    # hypothetical_minting_df['RBP=Baseline'] = cum_network_reward/1e6
     hypothetical_minting_df['date'] = pd.to_datetime(baseline_dates)
     minting_dff = minting_dff.merge(hypothetical_minting_df, on='date', how='left')
     current_date_vline = alt.Chart(
         pd.DataFrame({'date': [current_date]})).mark_rule(strokeDash=[3,5], color='black').encode(x='date:T')
 
     power_df = pd.melt(power_dff, id_vars=["date"], 
-                        value_vars=["Baseline", "RBP"],
+                        value_vars=["Baseline", "Configured", "Max-Historical"],
                         var_name='Power', 
                         value_name='EiB')
     power_df['EiB'] = power_df['EiB']
@@ -154,16 +161,16 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("EiB").scale(type='log'), 
                 color=alt.Color('Power', 
-                                sort=['Baseline', 'RBP'],
+                                sort=['Baseline', "Max-Historical", 'Configured'],
                                 legend=alt.Legend(title=None, orient='top')))
-        .properties(title="Network Power", width=800, height=200)
+        .properties(title="Network Power (RBP)", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
     )
     power += current_date_vline
     # st.altair_chart(power.interactive(), use_container_width=True) 
 
     minting_df = pd.melt(minting_dff, id_vars=["date"],
-                            value_vars=["Configured (Total Minting)", "Max Historical (Total Minting)", "RBP=Baseline", "Simple Minting"],
+                            value_vars=["RBP=Baseline", "Max-Historical", "Configured", "Simple"],
                             var_name='Scenario', value_name='Mined FIL')
     minting = (
         alt.Chart(minting_df)
@@ -171,7 +178,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("Mined FIL", title='M-FIL'), 
                 color=alt.Color('Scenario', 
-                                sort=['RBP=Baseline', 'Configured (Total Minting)', 'Simple Minting'],
+                                sort=['RBP=Baseline', "Max-Historical", 'Configured', 'Simple'],
                                 legend=alt.Legend(title=None, orient='top')))
         .properties(title="Mined FIL", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
@@ -187,7 +194,14 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     #     st.altair_chart(minting.interactive(), use_container_width=True)
     # with col2:
     #     st.altair_chart(power.interactive(), use_container_width=True)
-    st.write(ts_dff[['Simple', 'Configured', 'Max-Historical']])
+    st.markdown("##### Total Supply")
+    ts_dff = ts_dff[['Simple', 'Configured', 'Max-Historical']]
+    ts_dff.rename(columns={'Simple': 'Simple (B-FIL)', 'Configured': 'Configured (B-FIL)', 'Max-Historical': 'Max-Historical (B-FIL)'}, inplace=True)
+    ts_dff['Simple (B-FIL)'] = ts_dff['Simple (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
+    ts_dff['Configured (B-FIL)'] = ts_dff['Configured (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
+    ts_dff['Max-Historical (B-FIL)'] = ts_dff['Max-Historical (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
+    ts_dff.index = pd.to_datetime(ts_dff.index).date
+    st.dataframe(ts_dff)  # convert to percentage
 
 
 def run_sim(rbp, rr, fpr, lock_target, start_date, current_date, forecast_length_days, sector_duration_days, offline_data):
