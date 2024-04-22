@@ -93,7 +93,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # print(status_quo_results['circ_supply'].shape)
 
     power_dff = pd.DataFrame()
-    power_dff['Configured'] = status_quo_results['rb_total_power_eib']
+    power_dff['Status-Quo'] = status_quo_results['rb_total_power_eib']
     power_dff['Max-Historical'] = max_hist_results['rb_total_power_eib']
     power_dff['QAP'] = status_quo_results['qa_total_power_eib']
     power_dff['Baseline'] = baseline
@@ -104,7 +104,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     simple_before_curdate = status_quo_results['cum_network_reward'][:ixx]/1e6
     simple_after_curdate = status_quo_results['cum_simple_reward'][ixx:]/1e6  + (simple_before_curdate[-1]-status_quo_results['cum_simple_reward'][ixx]/1e6)
     simple_minting = np.concatenate([simple_before_curdate, simple_after_curdate])
-    minting_dff['Configured'] = status_quo_results['cum_network_reward']/1e6
+    minting_dff['Status-Quo'] = status_quo_results['cum_network_reward']/1e6
     minting_dff['Max-Historical'] = max_hist_results['cum_network_reward']/1e6
     minting_dff['Simple Minting Only'] = simple_minting
     minting_dff['date'] = pd.to_datetime(du.get_t(start_date, end_date=end_date))
@@ -129,7 +129,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
 
         date2ts[d] = {
             'Simple Minting Only': float(ts_simple_ix),
-            'Configured': float(ts_configured_ix),
+            'Status-Quo': float(ts_configured_ix),
             'Max-Historical': float(ts_maxhist_ix)
         }
     ts_df = pd.DataFrame(date2ts).T
@@ -143,15 +143,15 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     rbp_baseline_before_curdate = status_quo_results['cum_network_reward'][:ixx]/1e6
     rbp_baseline_after_curdate = cum_network_reward[ixx:]/1e6 + (rbp_baseline_before_curdate[-1]-cum_network_reward[ixx]/1e6)
     rbp_baseline_minting = np.concatenate([rbp_baseline_before_curdate, rbp_baseline_after_curdate])
-    hypothetical_minting_df['RBP=Baseline'] = rbp_baseline_minting
-    # hypothetical_minting_df['RBP=Baseline'] = cum_network_reward/1e6
+    hypothetical_minting_df['Max-Theoretical'] = rbp_baseline_minting
+    # hypothetical_minting_df['Max-Theoretical'] = cum_network_reward/1e6
     hypothetical_minting_df['date'] = pd.to_datetime(baseline_dates)
     minting_dff = minting_dff.merge(hypothetical_minting_df, on='date', how='left')
     current_date_vline = alt.Chart(
         pd.DataFrame({'date': [current_date]})).mark_rule(strokeDash=[3,5], color='black').encode(x='date:T')
 
     power_df = pd.melt(power_dff, id_vars=["date"], 
-                        value_vars=["Baseline", "Configured", "Max-Historical"],
+                        value_vars=["Baseline", "Status-Quo", "Max-Historical"],
                         var_name='Power', 
                         value_name='EiB')
     power_df['EiB'] = power_df['EiB']
@@ -161,12 +161,12 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("EiB").scale(type='log'), 
                 color=alt.Color('Power', 
-                                sort=['Baseline', "Max-Historical", 'Configured'],
+                                sort=['Baseline', "Max-Historical", 'Status-Quo'],
                                 legend=alt.Legend(title="Onboarding Configuration")),
                 strokeDash=alt.StrokeDash('Power', 
-                                        sort=['Baseline', "Max-Historical", 'Configured'],
+                                        sort=['Baseline', "Max-Historical", 'Status-Quo'],
                                         legend=None,
-                                        scale=alt.Scale(domain=['Baseline', "Max-Historical", 'Configured'],
+                                        scale=alt.Scale(domain=['Baseline', "Max-Historical", 'Status-Quo'],
                                                         range=[[0], [0], [2, 2]])))
         .properties(title="Network Power (RBP)", width=800, height=200)
         # .configure_title(fontSize=20, anchor='middle')
@@ -175,7 +175,7 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # st.altair_chart(power.interactive(), use_container_width=True) 
 
     minting_df = pd.melt(minting_dff, id_vars=["date"],
-                            value_vars=["RBP=Baseline", "Max-Historical", "Configured", "Simple Minting Only"],
+                            value_vars=["Max-Theoretical", "Max-Historical", "Status-Quo", "Simple Minting Only"],
                             var_name='Scenario', value_name='Mined FIL')
     minting = (
         alt.Chart(minting_df)
@@ -183,16 +183,16 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
         .encode(x=alt.X("date", title="", axis=alt.Axis(labelAngle=-45)), 
                 y=alt.Y("Mined FIL", title='M-FIL'), 
                 color=alt.Color('Scenario', 
-                            sort=['RBP=Baseline', "Max-Historical", 'Configured', 'Simple Minting Only'],
+                            sort=['Max-Theoretical', "Max-Historical", 'Status-Quo', 'Simple Minting Only'],
                             legend=alt.Legend(title="Onboarding Configuration")),
                 strokeDash=alt.StrokeDash('Scenario', 
-                                        sort=['RBP=Baseline', "Max-Historical", "Configured", 'Simple Minting Only'],
+                                        sort=['Max-Theoretical', "Max-Historical", "Status-Quo", 'Simple Minting Only'],
                                         legend=None,
-                                        scale=alt.Scale(domain=['RBP=Baseline', "Max-Historical", "Configured", 'Simple Minting Only'],
+                                        scale=alt.Scale(domain=['Max-Theoretical', "Max-Historical", "Status-Quo", 'Simple Minting Only'],
                                                         range=[[0], [0], [2, 2], [0]])))
         .properties(title="Mined FIL", width=800, height=200)
-        # .configure_title(fontSize=20, anchor='middle')
     )
+
     
     minting += current_date_vline
     # st.altair_chart(minting.interactive(), use_container_width=True)
@@ -205,10 +205,10 @@ def plot_panel(scenario_results, baseline, start_date, current_date, end_date):
     # with col2:
     #     st.altair_chart(power.interactive(), use_container_width=True)
     st.markdown("##### Total Supply")
-    ts_dff = ts_dff[['Simple Minting Only', 'Configured', 'Max-Historical']]
-    ts_dff.rename(columns={'Simple Minting Only': 'Simple Minting Only (B-FIL)', 'Configured': 'Configured (B-FIL)', 'Max-Historical': 'Max-Historical (B-FIL)'}, inplace=True)
+    ts_dff = ts_dff[['Simple Minting Only', 'Status-Quo', 'Max-Historical']]
+    ts_dff.rename(columns={'Simple Minting Only': 'Simple Minting Only (B-FIL)', 'Status-Quo': 'Status-Quo (B-FIL)', 'Max-Historical': 'Max-Historical (B-FIL)'}, inplace=True)
     ts_dff['Simple Minting Only (B-FIL)'] = ts_dff['Simple Minting Only (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
-    ts_dff['Configured (B-FIL)'] = ts_dff['Configured (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
+    ts_dff['Status-Quo (B-FIL)'] = ts_dff['Status-Quo (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
     ts_dff['Max-Historical (B-FIL)'] = ts_dff['Max-Historical (B-FIL)'].apply(lambda x: f'{x/1000.:.2f}')
     ts_dff.index = pd.to_datetime(ts_dff.index).date
     st.dataframe(ts_dff)  # convert to percentage
