@@ -4,7 +4,7 @@ altair
 watchdog
 jax
 jaxlib
-numpy
+numpy==1.26.4
 scipy
 matplotlib
 pystarboard @ git+https://github.com/protocol/pystarboard.git
